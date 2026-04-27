@@ -1,0 +1,115 @@
+﻿using System.ComponentModel;
+using System.Runtime.CompilerServices;
+
+namespace IDO_GEN_WordManager.Models
+{
+    public enum HeadingAction { Hide, Delete }
+
+    public class DocumentHeading : INotifyPropertyChanged
+    {
+        private bool _isVisible = true;
+        private bool _isExpanded = true;
+        private bool _isHiddenByCollapse = false;
+        private HeadingAction _action = HeadingAction.Hide;
+
+        public int ParagraphIndex { get; set; }
+        public int Level { get; set; }
+        public string Text { get; set; } = string.Empty;
+        /// <summary>Número extraído directamente del documento Word.</summary>
+        public string WordNumber { get; set; } = string.Empty;
+        public bool HasChildren { get; set; }
+
+        /// <summary>Muestra el número del Word si existe, de lo contrario cadena vacía.</summary>
+        public string NumberLabel => WordNumber;
+
+        public HeadingAction Action
+        {
+            get => _action;
+            set
+            {
+                if (_action != value)
+                {
+                    _action = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(IsHide));
+                    OnPropertyChanged(nameof(IsDelete));
+                    OnPropertyChanged(nameof(RowOpacity));
+                    OnPropertyChanged(nameof(TextDecoration));
+                }
+            }
+        }
+
+        public bool IsHide
+        {
+            get => _action == HeadingAction.Hide;
+            set
+            {
+                if (value)
+                {
+                    Action = HeadingAction.Hide;
+                    IsVisible = false;
+                }
+                else if (_action == HeadingAction.Hide)
+                {
+                    IsVisible = true;
+                }
+            }
+        }
+
+        public bool IsDelete
+        {
+            get => _action == HeadingAction.Delete;
+            set
+            {
+                if (value)
+                {
+                    Action = HeadingAction.Delete;
+                    IsVisible = false;
+                }
+                else if (_action == HeadingAction.Delete)
+                {
+                    IsVisible = true;
+                }
+            }
+        }
+
+        public bool IsVisible
+        {
+            get => _isVisible;
+            set { if (_isVisible != value) { _isVisible = value; OnPropertyChanged(); } }
+        }
+
+        public bool IsExpanded
+        {
+            get => _isExpanded;
+            set { if (_isExpanded != value) { _isExpanded = value; OnPropertyChanged(); OnPropertyChanged(nameof(ExpandIcon)); } }
+        }
+
+        public bool IsHiddenByCollapse
+        {
+            get => _isHiddenByCollapse;
+            set { if (_isHiddenByCollapse != value) { _isHiddenByCollapse = value; OnPropertyChanged(); } }
+        }
+
+        public string ExpandIcon => HasChildren ? (IsExpanded ? "▼" : "▶") : string.Empty;
+
+        public string LevelLabel => Level switch
+        {
+            1 => "Título",
+            2 => "Subtítulo",
+            3 => "Capítulo",
+            _ => $"Nivel {Level}"
+        };
+
+        public string LevelIndent => Level switch
+        {
+            1 => "0",
+            2 => "20",
+            _ => "40"
+        };
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        protected void OnPropertyChanged([CallerMemberName] string? name = null)
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    }
+}

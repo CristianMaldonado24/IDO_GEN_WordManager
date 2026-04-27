@@ -1,0 +1,105 @@
+﻿using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
+using IDO_GEN_WordManager.Models;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+
+namespace IDO_GEN_WordManager.Services
+{
+    public class WordReaderService
+    {
+        private static readonly Dictionary<string, int> HeadingStyleMap = new(System.StringComparer.OrdinalIgnoreCase)
+        {
+            { "Heading1",  1 }, { "Heading 1",  1 }, { "Título 1",  1 }, { "heading1", 1 },
+            { "Heading2",  2 }, { "Heading 2",  2 }, { "Título 2",  2 }, { "heading2", 2 },
+            { "Heading3",  3 }, { "Heading 3",  3 }, { "Título 3",  3 }, { "heading3", 3 },
+        };
+
+        public List<DocumentHeading> LoadHeadings(string filePath)
+        {
+            var result = new List<DocumentHeading>();
+
+            if (!File.Exists(filePath))
+                return result;
+
+            using var doc = WordprocessingDocument.Open(filePath, false);
+            var body = doc.MainDocumentPart?.Document?.Body;
+            if (body == null) return result;
+
+            var stylesPart = doc.MainDocumentPart?.StyleDefinitionsPart;
+            var styleNameToId = BuildStyleNameMap(stylesPart);
+
+            int index = 0;
+            foreach (var para in body.Elements<Paragraph>())
+            {
+                var styleId = para.ParagraphProperties?.ParagraphStyleId?.Val?.Value;
+                if (styleId != null)
+                {
+                    // Resolve style name through the style chain
+                    int? level = ResolveHeadingLevel(styleId, stylesPart, styleNameToId);
+                    if (level.HasValue)
+                    {
+                        var text = para.InnerText?.Trim();
+                        if (!string.IsNullOrWhiteSpace(text))
+                        {
+                            result.Add(new DocumentHeading
+                            {
+                                ParagraphIndex = index,
+                                Level = level.Value,
+                                Text = text,
+                                IsVisible = true
+                            });
+                        }
+                    }
+                }
+                index++;
+            }
+
+            return result;
+        }
+
+        private static Dictionary<string, string> BuildStyleNameMap(StyleDefinitionsPart? stylesPart)
+        {
+            var map = new Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
+            if (stylesPart?.Styles == null) return map;
+
+            foreach (var style in stylesPart.Styles.Elements<Style>())
+            {
+                var id = style.StyleId?.Value;
+                var name = style.StyleName?.Val?.Value;
+                if (id != null && name != null)
+                    map[id] = name;
+            }
+            return map;
+        }
+
+        private static int? ResolveHeadingLevel(string styleId, StyleDefinitionsPart? stylesPart,
+            Dictionary<string, string> styleNameMap)
+        {
+            // Check direct match on style ID
+            if (HeadingStyleMap.TryGetValue(styleId, out int lvl))
+                return lvl;
+
+            // Check style name
+            if (styleNameMap.TryGetValue(styleId, out string? styleName))
+            {
+                if (HeadingStyleMap.TryGetValue(styleName, out int lvl2))
+                    return lvl2;
+
+                // Walk outline level from style definition
+                if (stylesPart?.Styles != null)
+                {
+                    var style = stylesPart.Styles.Elements<Style>()
+                        .FirstOrDefault(s => s.StyleId?.Value == styleId);
+
+                    var outlineLvl = style?.StyleParagraphProperties?.OutlineLevel?.Val?.Value;
+                    if (outlineLvl.HasValue && outlineLvl.Value >= 0 && outlineLvl.Value <= 2)
+                        return outlineLvl.Value + 1;
+                }
+            }
+
+            return null;
+        }
+    }
+}

@@ -1,0 +1,130 @@
+﻿using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
+using IDO_GEN_WordManager.Models;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+
+namespace IDO_GEN_WordManager.Services
+{
+    public class WordReaderService
+    {
+        public List<DocumentHeading> LoadHeadings(string filePath)
+        {
+            var result = new List<DocumentHeading>();
+            if (!File.Exists(filePath)) return result;
+
+            using var doc = WordprocessingDocument.Open(filePath, false);
+            var body = doc.MainDocumentPart?.Document?.Body;
+            if (body == null) return result;
+
+            var levelMap = BuildLevelMap(doc.MainDocumentPart?.StyleDefinitionsPart);
+
+            int index = 0;
+            foreach (var para in body.Elements<Paragraph>())
+            {
+                var styleId = para.ParagraphProperties?.ParagraphStyleId?.Val?.Value;
+                if (styleId != null && levelMap.TryGetValue(styleId, out int level))
+                {
+                    var text = para.InnerText?.Trim();
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        var wordNumber = ExtractWordNumber(para);
+                        result.Add(new DocumentHeading { ParagraphIndex = index, Level = level, Text = text, WordNumber = wordNumber });
+                    }
+                }
+                index++;
+            }
+
+            // Fallback: si el Word no tiene numeración automática, generamos la jerárquica
+            bool anyNumber = result.Any(h => !string.IsNullOrEmpty(h.WordNumber));
+            if (!anyNumber) AssignNumbers(result);
+
+            MarkHasChildren(result);
+            return result;
+        }
+
+        /// <summary>
+        /// Extrae el número visible del párrafo. Intenta leer el campo de numeración de Word
+        /// inspeccionando los runs de campo (LISTNUM / SEQ) o el número en el propio texto.
+        /// </summary>
+        private static string ExtractWordNumber(Paragraph para)
+        {
+            // Los párrafos con numeración automática en Word almacenan el número
+            // en runs de campo. El texto real suele empezar después del número.
+            // Usamos la propiedad NumProperties para detectar si tiene lista.
+            var numPr = para.ParagraphProperties?.NumberingProperties;
+            if (numPr == null) return string.Empty;
+
+            // Intentar obtener el texto de los FieldChar runs (campo de número automático)
+            var fieldTexts = para.Descendants<FieldCode>()
+                .Select(f => f.InnerText?.Trim())
+                .Where(t => !string.IsNullOrEmpty(t))
+                .ToList();
+
+            if (fieldTexts.Count > 0)
+                return string.Join(".", fieldTexts);
+
+            // Si no hay field codes, extraer el primer fragmento numérico del texto
+            // (algunos editores insertan el número como texto plano antes del contenido)
+            var fullText = para.InnerText?.Trim() ?? string.Empty;
+            var match = System.Text.RegularExpressions.Regex.Match(fullText, @"^([\d\.]+)");
+            if (match.Success)
+                return match.Groups[1].Value;
+
+            return string.Empty;
+        }
+
+        private static void AssignNumbers(List<DocumentHeading> headings)
+        {
+            int l1 = 0, l2 = 0, l3 = 0;
+            foreach (var h in headings)
+            {
+                if (h.Level == 1) { l1++; l2 = 0; l3 = 0; h.WordNumber = $"{l1}"; }
+                else if (h.Level == 2) { l2++; l3 = 0; h.WordNumber = $"{l1}.{l2}"; }
+                else { l3++; h.WordNumber = $"{l1}.{l2}.{l3}"; }
+            }
+        }
+
+        private static void MarkHasChildren(List<DocumentHeading> headings)
+        {
+            for (int i = 0; i < headings.Count - 1; i++)
+                headings[i].HasChildren = headings[i + 1].Level > headings[i].Level;
+        }
+
+        private static Dictionary<string, int> BuildLevelMap(StyleDefinitionsPart? stylesPart)
+        {
+            var map = new Dictionary<string, int>(System.StringComparer.OrdinalIgnoreCase);
+            if (stylesPart?.Styles == null)
+            {
+                map["Heading1"] = 1; map["Heading2"] = 2; map["Heading3"] = 3;
+                return map;
+            }
+            foreach (var style in stylesPart.Styles.Elements<Style>())
+            {
+                var id = style.StyleId?.Value;
+                if (id == null) continue;
+                var outlineLvl = style.StyleParagraphProperties?.OutlineLevel?.Val?.Value;
+                if (outlineLvl.HasValue && outlineLvl.Value >= 0 && outlineLvl.Value <= 2)
+                { map[id] = outlineLvl.Value + 1; continue; }
+                var level = ParseHeadingNameLevel(style.StyleName?.Val?.Value ?? string.Empty);
+                if (level.HasValue) map[id] = level.Value;
+            }
+            return map;
+        }
+
+        private static int? ParseHeadingNameLevel(string styleName)
+        {
+            var n = styleName.Replace(" ", "").ToLowerInvariant();
+            foreach (var prefix in new[] { "heading", "título", "titulo", "encabezado" })
+            {
+                if (!n.StartsWith(prefix)) continue;
+                var rest = n.Substring(prefix.Length);
+                if (rest == "1") return 1;
+                if (rest == "2") return 2;
+                if (rest == "3") return 3;
+            }
+            return null;
+        }
+    }
+}

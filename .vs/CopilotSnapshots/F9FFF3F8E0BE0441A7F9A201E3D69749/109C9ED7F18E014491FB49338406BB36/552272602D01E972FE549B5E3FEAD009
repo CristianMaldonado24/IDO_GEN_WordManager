@@ -1,0 +1,265 @@
+﻿using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
+using IDO_GEN_WordManager.Models;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
+
+namespace IDO_GEN_WordManager.Services
+{
+    public class WordReaderService
+    {
+        private static readonly Regex EmbeddedNumber = new(@"^([\d]+(?:\.[\d]+)*\.?)\s+", RegexOptions.Compiled);
+
+        public List<DocumentHeading> LoadHeadings(string filePath)
+        {
+            var result = new List<DocumentHeading>();
+            if (!File.Exists(filePath)) return result;
+
+            using var doc = WordprocessingDocument.Open(filePath, false);
+            var body = doc.MainDocumentPart?.Document?.Body;
+            if (body == null) return result;
+
+            var levelMap   = BuildLevelMap(doc.MainDocumentPart?.StyleDefinitionsPart);
+            var numTracker = new NumberingTracker(doc.MainDocumentPart);
+
+            var index = 0;
+            foreach (var para in body.Elements<Paragraph>())
+            {
+                // Avanzar contadores para TODOS los párrafos (no solo headings)
+                var paraNumber = numTracker.Advance(para);
+
+                var styleId = para.ParagraphProperties?.ParagraphStyleId?.Val?.Value;
+                if (styleId != null && levelMap.TryGetValue(styleId, out int level))
+                {
+                    var fullText = para.InnerText?.Trim() ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(fullText))
+                    {
+                        string wordNumber;
+                        string text;
+
+                        // Prioridad 1: número embebido en el texto ("2.3.1 LEYES...")
+                        var match = EmbeddedNumber.Match(fullText);
+                        if (match.Success)
+                        {
+                            wordNumber = match.Groups[1].Value.TrimEnd('.');
+                            text = fullText.Substring(match.Length).Trim();
+                            if (string.IsNullOrWhiteSpace(text)) text = fullText;
+                        }
+                        // Prioridad 2: numeración automática calculada por el tracker
+                        else if (!string.IsNullOrEmpty(paraNumber))
+                        {
+                            wordNumber = paraNumber;
+                            text = fullText;
+                        }
+                        else
+                        {
+                            wordNumber = string.Empty;
+                            text = fullText;
+                        }
+
+                        result.Add(new DocumentHeading
+                        {
+                            ParagraphIndex = index,
+                            Level = level,
+                            Text = text,
+                            WordNumber = wordNumber
+                        });
+                    }
+                }
+                index++;
+            }
+
+            MarkHasChildren(result);
+            return result;
+        }
+
+        private static Dictionary<string, int> BuildLevelMap(StyleDefinitionsPart? stylesPart)
+        {
+            var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            if (stylesPart?.Styles == null)
+            {
+                map["Heading1"] = 1; map["Heading2"] = 2; map["Heading3"] = 3;
+                return map;
+            }
+            foreach (var style in stylesPart.Styles.Elements<Style>())
+            {
+                var id = style.StyleId?.Value;
+                if (id == null) continue;
+                var ol = style.StyleParagraphProperties?.OutlineLevel?.Val?.Value;
+                if (ol.HasValue && ol.Value >= 0 && ol.Value <= 2) { map[id] = ol.Value + 1; continue; }
+                var level = ParseHeadingLevel(style.StyleName?.Val?.Value ?? string.Empty);
+                if (level.HasValue) map[id] = level.Value;
+            }
+            return map;
+        }
+
+        private static int? ParseHeadingLevel(string name)
+        {
+            var n = name.Replace(" ", string.Empty).ToLowerInvariant();
+            foreach (var p in new[] { "heading", "título", "titulo", "encabezado" })
+            {
+                if (!n.StartsWith(p)) continue;
+                var s = n.Substring(p.Length);
+                if (s == "1") return 1;
+                if (s == "2") return 2;
+                if (s == "3") return 3;
+            }
+            return null;
+        }
+
+        private static void MarkHasChildren(List<DocumentHeading> headings)
+        {
+            for (var i = 0; i < headings.Count - 1; i++)
+                headings[i].HasChildren = headings[i + 1].Level > headings[i].Level;
+        }
+    }
+
+    /// <summary>
+    /// Rastrea los contadores de numeración procesando TODOS los párrafos del documento,
+    /// igual que lo hace Word internamente, para obtener el número visible real.
+    /// </summary>
+    internal sealed class NumberingTracker
+    {
+        // abstractNumId -> int[9] contadores compartidos por todos los numIds que apuntan a él
+        private readonly Dictionary<int, int[]> _counters = new();
+        // numId -> abstractNumId
+        private readonly Dictionary<int, int> _numToAbstract = new();
+        // (numId, ilvl) -> startOverride a aplicar la próxima vez que ese numId+nivel se use
+        private readonly Dictionary<(int, int), int> _pendingOverrides = new();
+        // abstractNumId -> LevelText por nivel
+        private readonly Dictionary<int, Dictionary<int, string>> _levelTexts = new();
+        // styleId -> (numId, ilvl)
+        private readonly Dictionary<string, (int numId, int ilvl)> _styleNum = new();
+
+        private readonly bool _hasNumbering;
+
+        public NumberingTracker(MainDocumentPart? mainPart)
+        {
+            var numPart   = mainPart?.NumberingDefinitionsPart;
+            var stylePart = mainPart?.StyleDefinitionsPart;
+
+            if (numPart?.Numbering == null) { _hasNumbering = false; return; }
+            _hasNumbering = true;
+
+            // abstractNumId -> LevelText + inicializar contadores
+            foreach (var abs in numPart.Numbering.Elements<AbstractNum>())
+            {
+                var aid    = abs.AbstractNumberId?.Value ?? 0;
+                var ctr    = new int[9];
+                var texts  = new Dictionary<int, string>();
+                foreach (var lvl in abs.Elements<Level>())
+                {
+                    var ilvl  = lvl.LevelIndex?.Value ?? 0;
+                    var start = lvl.StartNumberingValue?.Val?.Value ?? 1;
+                    texts[ilvl] = lvl.LevelText?.Val?.Value ?? string.Empty;
+                    if (ilvl < 9) ctr[ilvl] = start - 1;
+                }
+                _counters[aid]   = ctr;
+                _levelTexts[aid] = texts;
+            }
+
+            // numId -> abstractNumId + startOverrides pendientes
+            foreach (var num in numPart.Numbering.Elements<NumberingInstance>())
+            {
+                var nid = num.NumberID?.Value ?? 0;
+                var aid = num.AbstractNumId?.Val?.Value ?? 0;
+                _numToAbstract[nid] = aid;
+
+                foreach (var lo in num.Elements<LevelOverride>())
+                {
+                    var ilvl = lo.LevelIndex?.Value ?? 0;
+                    var sv   = lo.StartOverrideNumberingValue?.Val?.Value;
+                    if (sv.HasValue) _pendingOverrides[(nid, ilvl)] = sv.Value;
+                }
+            }
+
+            // Numeración implícita por estilo
+            if (stylePart?.Styles != null)
+            {
+                foreach (var style in stylePart.Styles.Elements<Style>())
+                {
+                    var sid  = style.StyleId?.Value;
+                    if (sid == null) continue;
+                    var np   = style.StyleParagraphProperties?.NumberingProperties;
+                    var nid  = np?.NumberingId?.Val?.Value ?? 0;
+                    var ilvl = np?.NumberingLevelReference?.Val?.Value ?? 0;
+                    if (nid > 0) _styleNum[sid] = (nid, ilvl);
+                }
+            }
+        }
+
+        public string Advance(Paragraph para)
+        {
+            if (!_hasNumbering) return string.Empty;
+
+            var numPr = para.ParagraphProperties?.NumberingProperties;
+            var numId = numPr?.NumberingId?.Val?.Value ?? 0;
+            var ilvl  = numPr?.NumberingLevelReference?.Val?.Value ?? -1;
+
+            // numId=0 en numPr significa "sin numeración" explícita — NO heredar del estilo
+            bool hasExplicitNoNum = numPr != null && numId == 0;
+
+            if (numId == 0 && !hasExplicitNoNum)
+            {
+                var sid = para.ParagraphProperties?.ParagraphStyleId?.Val?.Value;
+                if (sid != null && _styleNum.TryGetValue(sid, out var sn))
+                {
+                    numId = sn.numId;
+                    if (ilvl < 0) ilvl = sn.ilvl;
+                }
+            }
+            else if (numId == 0)
+            {
+                var sid = para.ParagraphProperties?.ParagraphStyleId?.Val?.Value;
+                if (sid != null && _styleNum.TryGetValue(sid, out var sn))
+                {
+                    numId = sn.numId;
+                    if (ilvl < 0) ilvl = sn.ilvl;
+                }
+            }
+
+            if (numId == 0 || !_numToAbstract.TryGetValue(numId, out int absId))
+                return string.Empty;
+
+            if (ilvl < 0) ilvl = 0;
+
+            if (!_counters.TryGetValue(absId, out var ctr))
+            {
+                ctr = new int[9];
+                _counters[absId] = ctr;
+            }
+
+            // Aplicar startOverride pendiente (solo una vez por numId+nivel)
+            var key = (numId, ilvl);
+            if (_pendingOverrides.TryGetValue(key, out int startVal))
+            {
+                ctr[ilvl] = startVal - 1;
+                _pendingOverrides.Remove(key);
+            }
+
+            // Incrementar nivel actual y resetear niveles inferiores
+            ctr[ilvl]++;
+            for (int i = ilvl + 1; i < ctr.Length; i++) ctr[i] = 0;
+
+            // Formatear con LevelText ("%1.%2.%3" → "2.1.3")
+            if (_levelTexts.TryGetValue(absId, out var texts) && texts.TryGetValue(ilvl, out var lvlText))
+            {
+                var formatted = Regex.Replace(lvlText, @"%(\d)", m =>
+                {
+                    int l = int.Parse(m.Groups[1].Value) - 1;
+                    return l >= 0 && l < ctr.Length ? ctr[l].ToString() : "0";
+                });
+                return formatted.Trim('.');
+            }
+
+            // Fallback jerárquico
+            var parts = new List<string>();
+            for (int i = 0; i <= ilvl; i++)
+                if (ctr[i] > 0) parts.Add(ctr[i].ToString());
+            return string.Join(".", parts);
+        }
+    }
+}

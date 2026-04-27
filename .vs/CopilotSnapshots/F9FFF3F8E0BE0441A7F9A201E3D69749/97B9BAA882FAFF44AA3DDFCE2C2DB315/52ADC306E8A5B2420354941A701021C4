@@ -1,0 +1,245 @@
+﻿using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
+using IDO_GEN_WordManager.Models;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
+
+namespace IDO_GEN_WordManager.Services
+{
+    public class WordReaderService
+    {
+        // Patrón para extraer número al inicio del texto: "1 ", "1.2 ", "1.2.3 ", "1.", etc.
+        private static readonly Regex NumberPrefix = new Regex(@"^([\d]+(?:\.[\d]+)*\.?)\s+", RegexOptions.Compiled);
+
+        public List<DocumentHeading> LoadHeadings(string filePath)
+        {
+            var result = new List<DocumentHeading>();
+            if (!File.Exists(filePath)) return result;
+
+            using var doc = WordprocessingDocument.Open(filePath, false);
+            var body = doc.MainDocumentPart?.Document?.Body;
+            if (body == null) return result;
+
+            var levelMap = BuildLevelMap(doc.MainDocumentPart?.StyleDefinitionsPart);
+
+            var index = 0;
+            foreach (var para in body.Elements<Paragraph>())
+            {
+                var styleId = para.ParagraphProperties?.ParagraphStyleId?.Val?.Value;
+                if (styleId != null && levelMap.TryGetValue(styleId, out int level))
+                {
+                    var fullText = para.InnerText?.Trim() ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(fullText))
+                    {
+                        // Intentar extraer número del inicio del texto
+                        var match = NumberPrefix.Match(fullText);
+                        string wordNumber;
+                        string text;
+
+                        if (match.Success)
+                        {
+                            wordNumber = match.Groups[1].Value.TrimEnd('.');
+                            text = fullText.Substring(match.Length).Trim();
+                            if (string.IsNullOrWhiteSpace(text))
+                                text = fullText; // fallback si queda vacío
+                        }
+                        else
+                        {
+                            wordNumber = string.Empty;
+                            text = fullText;
+                        }
+
+                        result.Add(new DocumentHeading
+                        {
+                            ParagraphIndex = index,
+                            Level = level,
+                            Text = text,
+                            WordNumber = wordNumber
+                        });
+                    }
+                }
+                index++;
+            }
+
+            MarkHasChildren(result);
+            return result;
+        }
+
+        private static Dictionary<string, int> BuildLevelMap(StyleDefinitionsPart? stylesPart)
+        {
+            var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            if (stylesPart?.Styles == null)
+            {
+                map["Heading1"] = 1; map["Heading2"] = 2; map["Heading3"] = 3;
+                return map;
+            }
+            foreach (var style in stylesPart.Styles.Elements<Style>())
+            {
+                var id = style.StyleId?.Value;
+                if (id == null) continue;
+                var outlineLvl = style.StyleParagraphProperties?.OutlineLevel?.Val?.Value;
+                if (outlineLvl.HasValue && outlineLvl.Value >= 0 && outlineLvl.Value <= 2)
+                { map[id] = outlineLvl.Value + 1; continue; }
+                var level = ParseHeadingNameLevel(style.StyleName?.Val?.Value ?? string.Empty);
+                if (level.HasValue) map[id] = level.Value;
+            }
+            return map;
+        }
+
+        private static int? ParseHeadingNameLevel(string styleName)
+        {
+            var n = styleName.Replace(" ", string.Empty).ToLowerInvariant();
+            foreach (var prefix in new[] { "heading", "título", "titulo", "encabezado" })
+            {
+                if (!n.StartsWith(prefix)) continue;
+                var rest = n.Substring(prefix.Length);
+                if (rest == "1") return 1;
+                if (rest == "2") return 2;
+                if (rest == "3") return 3;
+            }
+            return null;
+        }
+
+        private static void MarkHasChildren(List<DocumentHeading> headings)
+        {
+            for (var i = 0; i < headings.Count - 1; i++)
+                headings[i].HasChildren = headings[i + 1].Level > headings[i].Level;
+        }
+    }
+}
+
+
+namespace IDO_GEN_WordManager.Services
+{
+    public class WordReaderService
+    {
+        public List<DocumentHeading> LoadHeadings(string filePath)
+        {
+            var result = new List<DocumentHeading>();
+            if (!File.Exists(filePath))
+                return result;
+
+            dynamic? wordApp = null;
+            dynamic? wordDoc = null;
+
+            try
+            {
+                var wordType = Type.GetTypeFromProgID("Word.Application");
+                if (wordType == null)
+                    throw new InvalidOperationException("Microsoft Word no está instalado.");
+
+                wordApp = Activator.CreateInstance(wordType)
+                    ?? throw new InvalidOperationException("No se pudo iniciar Microsoft Word.");
+
+                wordApp.Visible = false;
+                wordApp.DisplayAlerts = 0; // wdAlertsNone
+
+                // Abrir solo con la ruta — dynamic COM resuelve el resto con valores por defecto
+                wordDoc = wordApp.Documents.Open(Path.GetFullPath(filePath));
+
+                int count = wordDoc.Paragraphs.Count;
+
+                for (var i = 1; i <= count; i++)
+                {
+                    dynamic paragraph = wordDoc.Paragraphs[i];
+                    try
+                    {
+                        dynamic style = paragraph.Style;
+                        int level = GetHeadingLevel(style);
+
+                        if (level < 1 || level > 3)
+                            continue;
+
+                        string rawText = paragraph.Range.Text ?? string.Empty;
+                        var text = rawText
+                            .Replace("\r", string.Empty)
+                            .Replace("\n", string.Empty)
+                            .Replace("\a", string.Empty)
+                            .Trim();
+
+                        if (string.IsNullOrWhiteSpace(text))
+                            continue;
+
+                        string wordNumber;
+                        try
+                        {
+                            wordNumber = ((string)paragraph.Range.ListFormat.ListString) ?? string.Empty;
+                        }
+                        catch
+                        {
+                            wordNumber = string.Empty;
+                        }
+
+                        result.Add(new DocumentHeading
+                        {
+                            ParagraphIndex = i - 1,
+                            Level = level,
+                            Text = text,
+                            WordNumber = wordNumber.Trim()
+                        });
+                    }
+                    finally
+                    {
+                        if (Marshal.IsComObject(paragraph))
+                            Marshal.ReleaseComObject(paragraph);
+                    }
+                }
+
+                MarkHasChildren(result);
+            }
+            finally
+            {
+                try { wordDoc?.Close(0); } catch { }
+                finally
+                {
+                    if (wordDoc != null && Marshal.IsComObject(wordDoc))
+                        Marshal.ReleaseComObject(wordDoc);
+                }
+
+                try { wordApp?.Quit(0); } catch { }
+                finally
+                {
+                    if (wordApp != null && Marshal.IsComObject(wordApp))
+                        Marshal.ReleaseComObject(wordApp);
+                }
+            }
+
+            return result;
+        }
+
+        private static int GetHeadingLevel(dynamic style)
+        {
+            try
+            {
+                int outlineLevel = (int)style.ParagraphFormat.OutlineLevel;
+                if (outlineLevel >= 1 && outlineLevel <= 3)
+                    return outlineLevel;
+
+                var styleName = ((string)(style.NameLocal ?? string.Empty))
+                    .Replace(" ", string.Empty)
+                    .ToLowerInvariant();
+
+                foreach (var prefix in new[] { "heading", "título", "titulo", "encabezado" })
+                {
+                    if (!styleName.StartsWith(prefix)) continue;
+                    var suffix = styleName.Substring(prefix.Length);
+                    if (suffix == "1") return 1;
+                    if (suffix == "2") return 2;
+                    if (suffix == "3") return 3;
+                }
+            }
+            catch { }
+
+            return 0;
+        }
+
+        private static void MarkHasChildren(List<DocumentHeading> headings)
+        {
+            for (var i = 0; i < headings.Count - 1; i++)
+                headings[i].HasChildren = headings[i + 1].Level > headings[i].Level;
+        }
+    }
+}
