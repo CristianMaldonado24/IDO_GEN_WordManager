@@ -12,15 +12,54 @@ namespace IDO_GEN_WordManager.Models
         private bool _isHiddenByCollapse = false;
         private HeadingAction _action = HeadingAction.Hide;
 
+        private string _wordNumber = string.Empty;
+        private string _originalWordNumber = string.Empty;
+
+        // Persistent internal ID for reference
+        public Guid InternalId { get; set; } = Guid.NewGuid();
+
         public int ParagraphIndex { get; set; }
         public int Level { get; set; }
         public string Text { get; set; } = string.Empty;
-        /// <summary>Número extraído directamente del documento Word.</summary>
-        public string WordNumber { get; set; } = string.Empty;
+
+        public string WordNumber
+        {
+            get => _wordNumber;
+            set
+            {
+                if (_wordNumber != value)
+                {
+                    _wordNumber = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(NumberLabel));
+                    OnPropertyChanged(nameof(NumberToolTip));
+                    OnPropertyChanged(nameof(HasRenumberedNumber));
+                }
+            }
+        }
+
+        public string OriginalWordNumber
+        {
+            get => _originalWordNumber;
+            set
+            {
+                if (_originalWordNumber != value)
+                {
+                    _originalWordNumber = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(NumberToolTip));
+                    OnPropertyChanged(nameof(HasRenumberedNumber));
+                }
+            }
+        }
+
         public bool HasChildren { get; set; }
 
-        /// <summary>Muestra el número del Word si existe, de lo contrario cadena vacía.</summary>
         public string NumberLabel => WordNumber;
+        public bool HasRenumberedNumber => !string.Equals(WordNumber ?? string.Empty, OriginalWordNumber ?? string.Empty, System.StringComparison.OrdinalIgnoreCase);
+        public string NumberToolTip => HasRenumberedNumber
+            ? $"UI/Excel: {WordNumber}\nOriginal Word: {OriginalWordNumber}"
+            : (string.IsNullOrWhiteSpace(WordNumber) ? Text : $"Word: {WordNumber}");
 
         public HeadingAction Action
         {
@@ -42,7 +81,7 @@ namespace IDO_GEN_WordManager.Models
 
         public bool IsHide
         {
-            get => _action == HeadingAction.Hide;
+            get => !_isVisible && _action == HeadingAction.Hide;
             set
             {
                 if (value)
@@ -59,7 +98,7 @@ namespace IDO_GEN_WordManager.Models
 
         public bool IsDelete
         {
-            get => _action == HeadingAction.Delete;
+            get => !_isVisible && _action == HeadingAction.Delete;
             set
             {
                 if (value)
@@ -82,11 +121,13 @@ namespace IDO_GEN_WordManager.Models
                 if (_isVisible != value)
                 {
                     _isVisible = value;
-                    OnPropertyChanged();
+                    if (value) _action = HeadingAction.Hide;
+                    OnPropertyChanged(nameof(IsVisible));
+                    OnPropertyChanged(nameof(IsHide));
+                    OnPropertyChanged(nameof(IsDelete));
                     OnPropertyChanged(nameof(RowOpacity));
                     OnPropertyChanged(nameof(TextDecoration));
                     OnPropertyChanged(nameof(RowBackground));
-                    if (value) { _action = HeadingAction.Hide; OnPropertyChanged(nameof(IsHide)); OnPropertyChanged(nameof(IsDelete)); }
                 }
             }
         }
@@ -121,12 +162,7 @@ namespace IDO_GEN_WordManager.Models
             _ => $"Nivel {Level}"
         };
 
-        public string LevelIndent => Level switch
-        {
-            1 => "0",
-            2 => "20",
-            _ => "40"
-        };
+        public string LevelIndent => ((Level - 1) * 20).ToString();
 
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string? name = null)

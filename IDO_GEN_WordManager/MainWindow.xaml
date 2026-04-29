@@ -4,8 +4,8 @@
         xmlns:vm="clr-namespace:IDO_GEN_WordManager.ViewModels"
         xmlns:models="clr-namespace:IDO_GEN_WordManager.Models"
         Title="IDO GEN — Word Manager"
-        Height="680" Width="1000"
-        MinWidth="750" MinHeight="500"
+        Height="820" Width="1640"
+        MinWidth="1460" MinHeight="620"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource BackgroundBrush}">
 
@@ -18,15 +18,26 @@
             <RowDefinition Height="64"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="48"/>
         </Grid.RowDefinitions>
 
         <!-- ═══════════════════════ HEADER ═══════════════════════ -->
         <Border Grid.Row="0" Background="{StaticResource PrimaryBrush}">
-            <Grid Margin="24,0">
+            <Grid Margin="20,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="📄" FontSize="24" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <Border Width="38" Height="38" Background="#214A82" CornerRadius="8" Margin="0,0,12,0">
+                        <Image Source="Resources/Brand/logo-idom.png"
+                               Width="22" Height="22"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Stretch="Uniform"/>
+                    </Border>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="IDO GEN — Word Manager"
                                    Foreground="White" FontSize="18" FontWeight="Bold"/>
@@ -34,6 +45,13 @@
                                    Foreground="#A0BDD8" FontSize="11"/>
                     </StackPanel>
                 </StackPanel>
+                <Image Grid.Column="1"
+                       Source="Resources/Brand/logo-idom.png"
+                       Height="34"
+                       HorizontalAlignment="Right"
+                       VerticalAlignment="Center"
+                       Stretch="Uniform"
+                       Margin="16,0,0,0"/>
             </Grid>
         </Border>
 
@@ -42,54 +60,204 @@
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1"
                 Padding="20,10">
             <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button Grid.Column="0" Content="📂  Cargar Word"
+                            Style="{StaticResource PrimaryButton}"
+                            Command="{Binding LoadFileCommand}"
+                            ToolTip="Seleccionar un archivo .docx"/>
+
+                    <Button Grid.Column="2" Content="✔ Seleccionar todo"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding SelectAllCommand}"/>
+
+                    <Button Grid.Column="4" Content="✖ Deseleccionar todo"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding DeselectAllCommand}"/>
+
+                    <Button Grid.Column="6" Content="👁  Mostrar Oculto"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding UnhideCommand}"
+                            ToolTip="Eliminar el efecto 'Oculto' (Vanish) de todo el texto del documento"/>
+
+                    <Button Grid.Column="8" Content="{Binding ExcelPanelToggleLabel}"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding ToggleExcelPanelCommand}"
+                            ToolTip="Mostrar u ocultar la barra de Excel"/>
+
+                    <Button Grid.Column="11" Content="💾  Exportar Word"
+                            Style="{StaticResource PrimaryButton}"
+                            Command="{Binding ExportCommand}"
+                            ToolTip="Exportar documento eliminando los encabezados ocultos"
+                            HorizontalAlignment="Right"
+                            MinWidth="170"/>
+                </Grid>
+
+                <Grid Grid.Row="1" Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="16"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="6"/>
+                        <ColumnDefinition Width="56"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0"
+                            Background="#F7FAFC" BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1" CornerRadius="6" Padding="12,8">
+                        <StackPanel>
+                            <TextBlock Text="Destino de exportación"
+                                       FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Margin="0,0,0,6"/>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <CheckBox IsChecked="{Binding CreateCopy, Mode=TwoWay}"
+                                          VerticalAlignment="Center" Cursor="Hand"/>
+                                <TextBlock Text="Crear copia"
+                                           FontSize="12" Foreground="{StaticResource TextPrimaryBrush}"
+                                           VerticalAlignment="Center" Margin="6,0,14,0"/>
+                                <CheckBox IsChecked="{Binding OverwriteOriginal, Mode=TwoWay}"
+                                          VerticalAlignment="Center" Cursor="Hand"/>
+                                <TextBlock Text="Sobreescribir original"
+                                           FontSize="12" Foreground="{StaticResource TextPrimaryBrush}"
+                                           VerticalAlignment="Center" Margin="6,0,0,0"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Grid.Column="2" Text="Inicio N°:" FontSize="12" FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource TextSecondaryBrush}"/>
+
+                    <TextBox Grid.Column="4"
+                             Text="{Binding RenumberStart, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             VerticalAlignment="Center" TextAlignment="Center"
+                             FontSize="12" Padding="4,4"
+                             BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                             ToolTip="Número inicial para el primer capítulo de nivel 1"/>
+
+                    <Button Grid.Column="6" Content="🔢  Renumerar"
+                            Style="{StaticResource SecondaryButton}"
+                            Command="{Binding RenumberCommand}"
+                            ToolTip="Reasignar numeración jerárquica desde el número indicado"/>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- ═══════════════════════ EXCEL PANEL ═══════════════════════ -->
+        <Border Grid.Row="2"
+                Background="#F0FFF4"
+                BorderBrush="#9AE6B4" BorderThickness="0,0,0,1"
+                Padding="20,10"
+                Visibility="{Binding IsExcelPanelVisible, Converter={StaticResource BoolToVisConverter}}">
+            <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="16"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="24"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="8"/>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="24"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="8"/>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="24"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="8"/>
+                    <ColumnDefinition Width="170"/>
+                    <ColumnDefinition Width="24"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="8"/>
+                    <ColumnDefinition Width="120"/>
                     <ColumnDefinition Width="*"/>
-                    <!-- Opción exportar -->
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="12"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <Button Grid.Column="0" Content="📂  Cargar Word"
+                <Button Grid.Column="0" Content="📂  Cargar Excel"
                         Style="{StaticResource PrimaryButton}"
-                        Command="{Binding LoadFileCommand}"
-                        ToolTip="Seleccionar un archivo .docx"/>
+                        Command="{Binding LoadExcelCommand}"
+                        ToolTip="Seleccionar un archivo .xlsx"/>
 
-                <Button Grid.Column="2" Content="✔ Seleccionar todo"
-                        Style="{StaticResource SecondaryButton}"
-                        Command="{Binding SelectAllCommand}"/>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Archivo: " FontWeight="SemiBold" FontSize="12"
+                               Foreground="{StaticResource TextPrimaryBrush}"/>
+                    <TextBlock Text="{Binding ExcelFileName}" FontSize="12"
+                               Foreground="{StaticResource AccentBrush}"/>
+                </StackPanel>
 
-                <Button Grid.Column="4" Content="✖ Deseleccionar todo"
-                        Style="{StaticResource SecondaryButton}"
-                        Command="{Binding DeselectAllCommand}"/>
+                <TextBlock Grid.Column="4" Text="Hoja:" FontSize="12" FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                <ComboBox Grid.Column="6"
+                          ItemsSource="{Binding ExcelSheets}"
+                          SelectedItem="{Binding SelectedExcelSheet, Mode=TwoWay}"
+                          VerticalAlignment="Center" FontSize="12"/>
 
-                <!-- Toggle sobreescribir / copia -->
-                <Border Grid.Column="6"
-                        Background="#F7FAFC" BorderBrush="{StaticResource BorderBrush}"
-                        BorderThickness="1" CornerRadius="6" Padding="10,6">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <CheckBox IsChecked="{Binding OverwriteSource, Mode=TwoWay}"
-                                  VerticalAlignment="Center" Margin="0,0,8,0" Cursor="Hand"/>
-                        <TextBlock Text="{Binding ExportModeLabel}"
-                                   FontSize="12" Foreground="{StaticResource TextPrimaryBrush}"
-                                   VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Border>
+                <TextBlock Grid.Column="8" Text="Columna:" FontSize="12" FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                <ComboBox Grid.Column="10"
+                          ItemsSource="{Binding ExcelColumns}"
+                          SelectedItem="{Binding SelectedExcelColumn, Mode=TwoWay}"
+                          VerticalAlignment="Center" FontSize="12"/>
 
-                <Button Grid.Column="8" Content="💾  Exportar Word"
-                        Style="{StaticResource DangerButton}"
-                        Command="{Binding ExportCommand}"
-                        ToolTip="Exportar documento eliminando los encabezados ocultos"/>
+                <TextBlock Grid.Column="12" Text="Modo:" FontSize="12" FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                <ComboBox Grid.Column="14"
+                          SelectedIndex="{Binding ExcelModeIndex, Mode=TwoWay}"
+                          VerticalAlignment="Center" FontSize="12">
+                    <ComboBoxItem Content="Mantener los de la lista"/>
+                    <ComboBoxItem Content="Aplicar a los de la lista"/>
+                </ComboBox>
+
+                <TextBlock Grid.Column="16" Text="Acción:" FontSize="12" FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                <ComboBox Grid.Column="18"
+                          SelectedIndex="{Binding ExcelActionIndex, Mode=TwoWay}"
+                          VerticalAlignment="Center" FontSize="12">
+                    <ComboBoxItem Content="Ocultar"/>
+                    <ComboBoxItem Content="Eliminar"/>
+                </ComboBox>
+
+                <Button Grid.Column="20" Content="✔  Aplicar"
+                        Style="{StaticResource PrimaryButton}"
+                        Command="{Binding ApplyExcelCommand}"
+                        ToolTip="Aplicar selección del Excel sobre los encabezados cargados"/>
             </Grid>
         </Border>
 
         <!-- ═══════════════════════ FILE INFO ═══════════════════════ -->
-        <Border Grid.Row="2" Background="#EBF5FF"
+        <Border Grid.Row="3" Background="#EBF5FF"
                 BorderBrush="#BEE3F8" BorderThickness="0,0,0,1"
                 Padding="20,8"
                 Visibility="{Binding IsFileLoaded, Converter={StaticResource BoolToVisConverter}}">
@@ -108,7 +276,7 @@
         </Border>
 
         <!-- ═══════════════════════ DATAGRID ═══════════════════════ -->
-        <Border Grid.Row="3" Margin="16,12,16,0"
+        <Border Grid.Row="4" Margin="16,12,16,0"
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8"
                 ClipToBounds="True">
             <DataGrid x:Name="HeadingsGrid"
@@ -229,6 +397,15 @@
                                                 <DataTrigger Binding="{Binding Level}" Value="3">
                                                     <Setter Property="Background" Value="{StaticResource Level3BadgeBg}"/>
                                                 </DataTrigger>
+                                                <DataTrigger Binding="{Binding Level}" Value="4">
+                                                    <Setter Property="Background" Value="{StaticResource Level4BadgeBg}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Level}" Value="5">
+                                                    <Setter Property="Background" Value="{StaticResource Level5BadgeBg}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Level}" Value="6">
+                                                    <Setter Property="Background" Value="{StaticResource Level6BadgeBg}"/>
+                                                </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
                                     </Border.Style>
@@ -245,6 +422,15 @@
                                                     <DataTrigger Binding="{Binding Level}" Value="3">
                                                         <Setter Property="Foreground" Value="{StaticResource Level3Brush}"/>
                                                     </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Level}" Value="4">
+                                                        <Setter Property="Foreground" Value="{StaticResource Level4Brush}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Level}" Value="5">
+                                                        <Setter Property="Foreground" Value="{StaticResource Level5Brush}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Level}" Value="6">
+                                                        <Setter Property="Foreground" Value="{StaticResource Level6Brush}"/>
+                                                    </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
                                         </TextBlock.Style>
@@ -259,6 +445,7 @@
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate DataType="{x:Type models:DocumentHeading}">
                                 <TextBlock Text="{Binding NumberLabel}"
+                                           ToolTip="{Binding NumberToolTip}"
                                            VerticalAlignment="Center" HorizontalAlignment="Center"
                                            FontSize="12" FontFamily="Consolas" FontWeight="SemiBold">
                                     <TextBlock.Style>
@@ -272,6 +459,15 @@
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding Level}" Value="3">
                                                     <Setter Property="Foreground" Value="{StaticResource Level3Brush}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Level}" Value="4">
+                                                    <Setter Property="Foreground" Value="{StaticResource Level4Brush}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Level}" Value="5">
+                                                    <Setter Property="Foreground" Value="{StaticResource Level5Brush}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Level}" Value="6">
+                                                    <Setter Property="Foreground" Value="{StaticResource Level6Brush}"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
@@ -309,6 +505,21 @@
                                                     <Setter Property="FontSize" Value="12"/>
                                                     <Setter Property="Foreground" Value="{StaticResource Level3Brush}"/>
                                                 </DataTrigger>
+                                                <DataTrigger Binding="{Binding Level}" Value="4">
+                                                    <Setter Property="FontWeight" Value="Normal"/>
+                                                    <Setter Property="FontSize" Value="12"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource Level4Brush}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Level}" Value="5">
+                                                    <Setter Property="FontWeight" Value="Normal"/>
+                                                    <Setter Property="FontSize" Value="12"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource Level5Brush}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Level}" Value="6">
+                                                    <Setter Property="FontWeight" Value="Normal"/>
+                                                    <Setter Property="FontSize" Value="12"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource Level6Brush}"/>
+                                                </DataTrigger>
                                                 <DataTrigger Binding="{Binding TextDecoration}" Value="Strikethrough">
                                                     <Setter Property="TextDecorations" Value="Strikethrough"/>
                                                 </DataTrigger>
@@ -325,11 +536,13 @@
                 <!-- Color de fila: amarillo claro=ocultar, rojo claro=eliminar -->
                 <DataGrid.RowStyle>
                     <Style TargetType="DataGridRow">
-                        <Setter Property="Background" Value="{Binding RowBackground}"/>
                         <Style.Triggers>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter Property="Background" Value="#BBDEFB"/>
-                            </Trigger>
+                            <DataTrigger Binding="{Binding IsHide}" Value="True">
+                                <Setter Property="Background" Value="#FFF9C4"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsDelete}" Value="True">
+                                <Setter Property="Background" Value="#FFCDD2"/>
+                            </DataTrigger>
                         </Style.Triggers>
                     </Style>
                 </DataGrid.RowStyle>
@@ -364,7 +577,7 @@
         </Border>
 
         <!-- ═══════════════════════ STATUS BAR ═══════════════════════ -->
-        <Border Grid.Row="4" Background="{StaticResource SurfaceBrush}"
+        <Border Grid.Row="5" Background="{StaticResource SurfaceBrush}"
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0"
                 Margin="0,12,0,0" Padding="20,0">
             <Grid>

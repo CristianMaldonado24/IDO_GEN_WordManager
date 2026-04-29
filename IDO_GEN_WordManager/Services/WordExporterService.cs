@@ -17,7 +17,7 @@ namespace IDO_GEN_WordManager.Services
             if (inactive.Count == 0) return;
 
             var toDelete = new HashSet<int>(inactive.Where(h => h.Action == HeadingAction.Delete).Select(h => h.ParagraphIndex));
-            var toHide   = new HashSet<int>(inactive.Where(h => h.Action == HeadingAction.Hide).Select(h => h.ParagraphIndex));
+            var toHide = new HashSet<int>(inactive.Where(h => h.Action == HeadingAction.Hide).Select(h => h.ParagraphIndex));
 
             using var doc = WordprocessingDocument.Open(destPath, true);
             var body = doc.MainDocumentPart?.Document?.Body;
@@ -25,21 +25,29 @@ namespace IDO_GEN_WordManager.Services
 
             var paragraphs = body.Elements<Paragraph>().ToList();
 
-            // Ocultar: hacer el texto blanco (invisible pero conserva espacio en el layout)
+            // Ocultar: aplicar marcas para vistas paginadas y web.
             foreach (var idx in toHide)
             {
                 if (idx >= paragraphs.Count) continue;
                 var para = paragraphs[idx];
+                var ppr = para.ParagraphProperties ?? para.PrependChild(new ParagraphProperties());
+                var pmr = ppr.ParagraphMarkRunProperties ?? ppr.AppendChild(new ParagraphMarkRunProperties());
+
+                if (pmr.GetFirstChild<Vanish>() == null)
+                    pmr.AppendChild(new Vanish());
+
+                if (pmr.GetFirstChild<WebHidden>() == null)
+                    pmr.AppendChild(new WebHidden());
+
                 foreach (var run in para.Descendants<Run>())
                 {
                     var rpr = run.RunProperties ?? run.PrependChild(new RunProperties());
-                    // Color blanco = invisible
-                    rpr.Color = new Color { Val = "FFFFFF" };
-                    rpr.FontSize = new FontSize { Val = "2" };     // 1pt, ocupa mínimo espacio
+                    rpr.Vanish = new Vanish();
+                    rpr.WebHidden = new WebHidden();
                 }
             }
 
-            // Eliminar: quitar el párrafo por completo
+            // Eliminar: quitar el parrafo por completo
             foreach (var idx in toDelete.OrderByDescending(i => i))
             {
                 if (idx < paragraphs.Count)
@@ -47,6 +55,73 @@ namespace IDO_GEN_WordManager.Services
             }
 
             doc.MainDocumentPart!.Document.Save();
+        }
+
+        /// <summary>
+        /// Elimina las marcas de oculto de todos los runs del documento,
+        /// haciendo visible todo el texto que fue ocultado programaticamente.
+        /// </summary>
+        public int UnhideAllVanish(string filePath)
+        {
+            int count = 0;
+            using var doc = WordprocessingDocument.Open(filePath, true);
+            var body = doc.MainDocumentPart?.Document?.Body;
+            if (body == null) return count;
+
+            foreach (var para in body.Descendants<Paragraph>())
+            {
+                var pmr = para.ParagraphProperties?.ParagraphMarkRunProperties;
+                if (pmr == null) continue;
+
+                bool changed = false;
+                var paragraphVanish = pmr.GetFirstChild<Vanish>();
+                if (paragraphVanish != null)
+                {
+                    paragraphVanish.Remove();
+                    changed = true;
+                }
+
+                var paragraphWebHidden = pmr.GetFirstChild<WebHidden>();
+                if (paragraphWebHidden != null)
+                {
+                    paragraphWebHidden.Remove();
+                    changed = true;
+                }
+
+                if (!changed) continue;
+
+                count++;
+                if (!pmr.HasChildren)
+                    pmr.Remove();
+            }
+
+            foreach (var run in body.Descendants<Run>())
+            {
+                var rpr = run.RunProperties;
+                if (rpr == null) continue;
+
+                bool changed = false;
+                if (rpr.Vanish != null)
+                {
+                    rpr.Vanish.Remove();
+                    changed = true;
+                }
+
+                if (rpr.WebHidden != null)
+                {
+                    rpr.WebHidden.Remove();
+                    changed = true;
+                }
+
+                if (!changed) continue;
+
+                count++;
+                if (!rpr.HasChildren)
+                    rpr.Remove();
+            }
+
+            doc.MainDocumentPart!.Document.Save();
+            return count;
         }
     }
 }

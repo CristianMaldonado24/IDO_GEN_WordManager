@@ -2,7 +2,7 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!-- Colores base -->
-    <Color x:Key="PrimaryColor">#1E3A5F</Color>
+    <Color x:Key="PrimaryColor">#3D7CC3</Color>
     <Color x:Key="AccentColor">#2E86DE</Color>
     <Color x:Key="BackgroundColor">#F4F6F9</Color>
     <Color x:Key="SurfaceColor">#FFFFFF</Color>
@@ -22,10 +22,16 @@
     <SolidColorBrush x:Key="Level1Brush" Color="#1E3A5F"/>
     <SolidColorBrush x:Key="Level2Brush" Color="#2471A3"/>
     <SolidColorBrush x:Key="Level3Brush" Color="#1A7A4A"/>
+    <SolidColorBrush x:Key="Level4Brush" Color="#6B46C1"/>
+    <SolidColorBrush x:Key="Level5Brush" Color="#0E7C86"/>
+    <SolidColorBrush x:Key="Level6Brush" Color="#C05621"/>
 
     <SolidColorBrush x:Key="Level1BadgeBg" Color="#D6E4F7"/>
     <SolidColorBrush x:Key="Level2BadgeBg" Color="#D6EAF8"/>
     <SolidColorBrush x:Key="Level3BadgeBg" Color="#D5F5E3"/>
+    <SolidColorBrush x:Key="Level4BadgeBg" Color="#E9D8FD"/>
+    <SolidColorBrush x:Key="Level5BadgeBg" Color="#B2F5EA"/>
+    <SolidColorBrush x:Key="Level6BadgeBg" Color="#FEEBC8"/>
 
     <!-- Botón primario -->
     <Style x:Key="PrimaryButton" TargetType="Button">
@@ -111,7 +117,6 @@
         <Setter Property="GridLinesVisibility" Value="Horizontal"/>
         <Setter Property="HorizontalGridLinesBrush" Value="#EDF2F7"/>
         <Setter Property="RowBackground" Value="White"/>
-        <Setter Property="AlternatingRowBackground" Value="#F7FAFC"/>
         <Setter Property="SelectionMode" Value="Single"/>
         <Setter Property="AutoGenerateColumns" Value="False"/>
         <Setter Property="CanUserAddRows" Value="False"/>
@@ -121,6 +126,7 @@
         <Setter Property="FontSize" Value="13"/>
         <Setter Property="RowHeight" Value="38"/>
         <Setter Property="ColumnHeaderHeight" Value="40"/>
+        <Setter Property="Background" Value="Transparent"/>
     </Style>
 
     <!-- Header del DataGrid -->
@@ -137,12 +143,16 @@
     <!-- Fila del DataGrid -->
     <Style TargetType="DataGridRow">
         <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+
+    <!-- Celda del DataGrid: sin resalte al seleccionar -->
+    <Style TargetType="DataGridCell">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
         <Style.Triggers>
             <Trigger Property="IsSelected" Value="True">
-                <Setter Property="Background" Value="#EBF5FF"/>
-            </Trigger>
-            <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="Background" Value="#F0F7FF"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
             </Trigger>
         </Style.Triggers>
     </Style>

@@ -64,7 +64,8 @@ namespace IDO_GEN_WordManager.Services
                             ParagraphIndex = index,
                             Level = level,
                             Text = text,
-                            WordNumber = wordNumber
+                            WordNumber = wordNumber,
+                            InternalId = Guid.NewGuid()
                         });
                     }
                 }
@@ -74,6 +75,9 @@ namespace IDO_GEN_WordManager.Services
             // Si ningún heading tiene número del tracker, inferir jerárquicamente
             // a partir de los números embebidos en los headings de nivel superior
             InferMissingNumbers(result);
+
+            foreach (var heading in result)
+                heading.OriginalWordNumber = heading.WordNumber;
 
             MarkHasChildren(result);
             return result;
@@ -147,7 +151,7 @@ namespace IDO_GEN_WordManager.Services
                 var id = style.StyleId?.Value;
                 if (id == null) continue;
                 var ol = style.StyleParagraphProperties?.OutlineLevel?.Val?.Value;
-                if (ol.HasValue && ol.Value >= 0 && ol.Value <= 2) { map[id] = ol.Value + 1; continue; }
+                if (ol.HasValue && ol.Value >= 0 && ol.Value <= 8) { map[id] = ol.Value + 1; continue; }
                 var level = ParseHeadingLevel(style.StyleName?.Val?.Value ?? string.Empty);
                 if (level.HasValue) map[id] = level.Value;
             }
@@ -161,9 +165,7 @@ namespace IDO_GEN_WordManager.Services
             {
                 if (!n.StartsWith(p)) continue;
                 var s = n.Substring(p.Length);
-                if (s == "1") return 1;
-                if (s == "2") return 2;
-                if (s == "3") return 3;
+                if (int.TryParse(s, out int lvl) && lvl >= 1 && lvl <= 9) return lvl;
             }
             return null;
         }
@@ -237,14 +239,32 @@ namespace IDO_GEN_WordManager.Services
             // Numeración implícita por estilo
             if (stylePart?.Styles != null)
             {
+                // Primer paso: recopilar numId/ilvl/basedOn de cada estilo
+                var rawStyleNum = new Dictionary<string, (int? numId, int ilvl, string? basedOn)>(StringComparer.OrdinalIgnoreCase);
                 foreach (var style in stylePart.Styles.Elements<Style>())
                 {
-                    var sid  = style.StyleId?.Value;
+                    var sid     = style.StyleId?.Value;
                     if (sid == null) continue;
-                    var np   = style.StyleParagraphProperties?.NumberingProperties;
-                    var nid  = np?.NumberingId?.Val?.Value ?? 0;
-                    var ilvl = np?.NumberingLevelReference?.Val?.Value ?? 0;
-                    if (nid > 0) _styleNum[sid] = (nid, ilvl);
+                    var np      = style.StyleParagraphProperties?.NumberingProperties;
+                    int? nid    = np?.NumberingId?.Val?.Value is int n && n > 0 ? n : null;
+                    var ilvl    = np?.NumberingLevelReference?.Val?.Value ?? 0;
+                    var basedOn = style.BasedOn?.Val?.Value;
+                    rawStyleNum[sid] = (nid, ilvl, basedOn);
+                }
+
+                // Segundo paso: resolver numId heredado via cadena basedOn
+                int? ResolveNumId(string sid, int depth = 0)
+                {
+                    if (depth > 10 || !rawStyleNum.TryGetValue(sid, out var entry)) return null;
+                    if (entry.numId.HasValue) return entry.numId;
+                    return entry.basedOn != null ? ResolveNumId(entry.basedOn, depth + 1) : null;
+                }
+
+                foreach (var kvp in rawStyleNum)
+                {
+                    var resolvedNumId = ResolveNumId(kvp.Key);
+                    if (resolvedNumId.HasValue)
+                        _styleNum[kvp.Key] = (resolvedNumId.Value, kvp.Value.ilvl);
                 }
             }
         }

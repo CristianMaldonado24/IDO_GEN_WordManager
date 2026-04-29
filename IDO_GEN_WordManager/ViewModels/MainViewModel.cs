@@ -2,11 +2,13 @@ using IDO_GEN_WordManager.Models;
 using IDO_GEN_WordManager.Services;
 using Microsoft.Win32;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Input;
 
@@ -14,13 +16,85 @@ namespace IDO_GEN_WordManager.ViewModels
 {
     public class MainViewModel : INotifyPropertyChanged
     {
+        private static readonly Regex HierarchyTokenRegex = new(@"^\d+(?:[.\-\/]\d+)+\.?$", RegexOptions.Compiled);
+
         private readonly WordReaderService _reader = new();
         private readonly WordExporterService _exporter = new();
+        private readonly ExcelReaderService _excelReader = new();
 
         private string _filePath = string.Empty;
         private string _statusMessage = "Sin archivo cargado";
         private bool _isFileLoaded;
         private bool _overwriteSource = false;
+
+        // Excel import state
+        private List<ExcelSheetData> _excelWorkbook = new();
+        private Dictionary<int, (string Header, List<string> Values)> _excelData = new();
+        private string _excelFileName = "Ningún archivo cargado";
+        private bool _isExcelPanelVisible = true;
+        private string? _selectedExcelSheet;
+        private string? _selectedExcelColumn;
+        private int _excelModeIndex = 1;   // 0 = Mantener, 1 = Aplicar a los de la lista
+        private int _excelActionIndex; // 0 = Ocultar,  1 = Eliminar
+
+        public ObservableCollection<string> ExcelSheets { get; } = new();
+        public ObservableCollection<string> ExcelColumns { get; } = new();
+
+        public string ExcelFileName
+        {
+            get => _excelFileName;
+            set { _excelFileName = value; OnPropertyChanged(); }
+        }
+
+        public bool IsExcelPanelVisible
+        {
+            get => _isExcelPanelVisible;
+            set
+            {
+                _isExcelPanelVisible = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ExcelPanelToggleLabel));
+            }
+        }
+
+        public string ExcelPanelToggleLabel => IsExcelPanelVisible ? "📊  Ocultar Excel" : "📊  Mostrar Excel";
+
+        public string? SelectedExcelSheet
+        {
+            get => _selectedExcelSheet;
+            set
+            {
+                if (_selectedExcelSheet == value) return;
+                _selectedExcelSheet = value;
+                OnPropertyChanged();
+                LoadSelectedExcelSheetColumns();
+            }
+        }
+
+        public string? SelectedExcelColumn
+        {
+            get => _selectedExcelColumn;
+            set { _selectedExcelColumn = value; OnPropertyChanged(); }
+        }
+
+        public int ExcelModeIndex
+        {
+            get => _excelModeIndex;
+            set { _excelModeIndex = value; OnPropertyChanged(); }
+        }
+
+        public int ExcelActionIndex
+        {
+            get => _excelActionIndex;
+            set { _excelActionIndex = value; OnPropertyChanged(); }
+        }
+
+        private int _renumberStart = 1;
+        public int RenumberStart
+        {
+            get => _renumberStart;
+            set { _renumberStart = value < 0 ? 0 : value; OnPropertyChanged(); }
+        }
 
         // Lista interna completa (incluye items colapsados)
         private readonly ObservableCollection<DocumentHeading> _allHeadings = new();
@@ -51,7 +125,33 @@ namespace IDO_GEN_WordManager.ViewModels
         public bool OverwriteSource
         {
             get => _overwriteSource;
-            set { _overwriteSource = value; OnPropertyChanged(); OnPropertyChanged(nameof(ExportModeLabel)); }
+            set
+            {
+                if (_overwriteSource == value) return;
+                _overwriteSource = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(CreateCopy));
+                OnPropertyChanged(nameof(OverwriteOriginal));
+                OnPropertyChanged(nameof(ExportModeLabel));
+            }
+        }
+
+        public bool CreateCopy
+        {
+            get => !_overwriteSource;
+            set
+            {
+                if (value) OverwriteSource = false;
+            }
+        }
+
+        public bool OverwriteOriginal
+        {
+            get => _overwriteSource;
+            set
+            {
+                if (value) OverwriteSource = true;
+            }
         }
 
         public string ExportModeLabel => _overwriteSource ? "Sobreescribir archivo original" : "Crear copia";
@@ -64,14 +164,26 @@ namespace IDO_GEN_WordManager.ViewModels
         public ICommand SelectAllCommand { get; }
         public ICommand DeselectAllCommand { get; }
         public ICommand ToggleExpandCommand { get; }
+        public ICommand ToggleExcelPanelCommand { get; }
+        public ICommand LoadExcelCommand { get; }
+        public ICommand ApplyExcelCommand { get; }
+        public ICommand RenumberCommand { get; }
+        public ICommand UnhideCommand { get; }
 
         public MainViewModel()
         {
-            LoadFileCommand    = new RelayCommand(_ => LoadFile());
-            ExportCommand      = new RelayCommand(_ => Export(), _ => IsFileLoaded && _allHeadings.Count > 0);
-            SelectAllCommand   = new RelayCommand(_ => SetAllVisibility(true),  _ => _allHeadings.Count > 0);
-            DeselectAllCommand = new RelayCommand(_ => SetAllVisibility(false), _ => _allHeadings.Count > 0);
-            ToggleExpandCommand = new RelayCommand(h => ToggleExpand(h as DocumentHeading));
+            LoadFileCommand         = new RelayCommand(_ => LoadFile());
+            ExportCommand           = new RelayCommand(_ => Export(), _ => IsFileLoaded && _allHeadings.Count > 0);
+            SelectAllCommand        = new RelayCommand(_ => SetAllVisibility(true),  _ => _allHeadings.Count > 0);
+            DeselectAllCommand      = new RelayCommand(_ => SetAllVisibility(false), _ => _allHeadings.Count > 0);
+            ToggleExpandCommand     = new RelayCommand(h => ToggleExpand(h as DocumentHeading));
+            ToggleExcelPanelCommand = new RelayCommand(_ => IsExcelPanelVisible = !IsExcelPanelVisible);
+            LoadExcelCommand        = new RelayCommand(_ => LoadExcel());
+            ApplyExcelCommand       = new RelayCommand(_ => ApplyExcel(),
+                                        _ => IsFileLoaded && SelectedExcelColumn != null);
+            RenumberCommand         = new RelayCommand(_ => Renumber(),
+                                        _ => IsFileLoaded && _allHeadings.Count > 0);
+            UnhideCommand           = new RelayCommand(_ => UnhideDocument(), _ => IsFileLoaded);
         }
 
         private void LoadFile()
@@ -111,6 +223,180 @@ namespace IDO_GEN_WordManager.ViewModels
                 MessageBox.Show($"No se pudo cargar el documento:\n\n{ex.Message}",
                     "Error al cargar", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        private void UnhideDocument()
+        {
+            try
+            {
+                var confirm = MessageBox.Show(
+                    $"¿Eliminar el efecto 'Oculto' (Vanish) de todo el texto en:\n{FilePath}?\n\nEl archivo se modificará directamente.",
+                    "Confirmar Mostrar Oculto", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (confirm != MessageBoxResult.Yes) return;
+
+                int removed = _exporter.UnhideAllVanish(FilePath);
+                StatusMessage = removed > 0
+                    ? $"Se eliminó el efecto 'Oculto' de {removed} segmento(s) de texto."
+                    : "No se encontró texto oculto con efecto Vanish en el documento.";
+                MessageBox.Show(StatusMessage, "Mostrar Oculto", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error al eliminar el efecto oculto:\n{ex.Message}",
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void Renumber()
+        {
+            var counters = new int[10];
+            counters[1] = RenumberStart - 1;
+
+            foreach (var h in _allHeadings)
+            {
+                var lvl = Math.Clamp(h.Level, 1, 9);
+                counters[lvl]++;
+                for (int i = lvl + 1; i < counters.Length; i++) counters[i] = 0;
+
+                var parts = new List<string>();
+                for (int i = 1; i <= lvl; i++) parts.Add(counters[i].ToString());
+                h.WordNumber = string.Join(".", parts);
+            }
+
+            StatusMessage = $"Numeración reasignada desde {RenumberStart}.";
+        }
+
+        private void LoadExcel()
+        {
+            var dlg = new OpenFileDialog
+            {
+                Title = "Seleccionar archivo Excel",
+                Filter = "Archivos Excel (*.xlsx)|*.xlsx"
+            };
+            if (dlg.ShowDialog() != true) return;
+
+            try
+            {
+                _excelWorkbook = _excelReader.LoadWorkbook(dlg.FileName);
+                ExcelFileName = Path.GetFileName(dlg.FileName);
+
+                ExcelSheets.Clear();
+                foreach (var sheet in _excelWorkbook)
+                    ExcelSheets.Add(sheet.SheetName);
+
+                ExcelColumns.Clear();
+                SelectedExcelSheet = ExcelSheets.FirstOrDefault();
+                StatusMessage = $"Excel cargado: {ExcelSheets.Count} hoja(s) detectadas.";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Error al cargar Excel: {ex.Message}";
+                MessageBox.Show($"No se pudo cargar el archivo Excel:\n\n{ex.Message}",
+                    "Error al cargar Excel", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void ApplyExcel()
+        {
+            if (SelectedExcelColumn == null || _excelData.Count == 0) return;
+
+            var colEntry = _excelData.Values.FirstOrDefault(c => c.Header == SelectedExcelColumn);
+            var selectedNumbers = new HashSet<string>(
+                (colEntry.Values ?? new List<string>())
+                    .Select(NormalizeHierarchyKey)
+                    .Where(v => !string.IsNullOrWhiteSpace(v))!
+                    .Cast<string>(),
+                StringComparer.OrdinalIgnoreCase);
+            var availableNumbers = new HashSet<string>(
+                _allHeadings
+                    .Select(h => NormalizeHierarchyKey(h.WordNumber))
+                    .Where(v => !string.IsNullOrWhiteSpace(v))!,
+                StringComparer.OrdinalIgnoreCase);
+
+            bool keepMode    = ExcelModeIndex == 0;   // 0=Mantener, 1=Aplicar
+            bool deleteAction = ExcelActionIndex == 1; // 0=Ocultar,  1=Eliminar
+
+            int affected = 0;
+            foreach (var h in _allHeadings)
+            {
+                var num = NormalizeHierarchyKey(h.WordNumber);
+                bool match = !string.IsNullOrEmpty(num) && selectedNumbers.Contains(num);
+
+                bool shouldMark = keepMode ? !match : match;
+                if (shouldMark)
+                {
+                    if (deleteAction) h.IsDelete = true;
+                    else              h.IsHide   = true;
+                    affected++;
+                }
+                else
+                {
+                    h.IsVisible = true;
+                }
+            }
+
+            RefreshCounters();
+            var actionLabel = deleteAction ? "eliminar" : "ocultar";
+            var missingNumbers = selectedNumbers.Where(n => !availableNumbers.Contains(n)).ToList();
+            if (affected == 0 && missingNumbers.Count > 0)
+            {
+                var preview = string.Join(", ", missingNumbers.Take(5));
+                StatusMessage = $"No se encontraron referencias en la numeracion visible. Excel no hallado: {preview}";
+            }
+            else if (missingNumbers.Count > 0)
+            {
+                var preview = string.Join(", ", missingNumbers.Take(5));
+                StatusMessage = $"Excel aplicado sobre la numeracion visible: {affected} encabezado(s) marcados para {actionLabel}. No encontrados: {preview}";
+            }
+            else
+            {
+                StatusMessage = $"Excel aplicado sobre la numeracion visible de la interfaz: {affected} encabezado(s) marcados para {actionLabel}.";
+            }
+        }
+
+        private static string NormalizeHierarchyKey(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+
+            var normalized = value.Trim()
+                .Replace('\u00A0', ' ')
+                .Trim()
+                .Trim('\'', '"');
+
+            if (!HierarchyTokenRegex.IsMatch(normalized))
+                return normalized;
+
+            normalized = normalized.TrimEnd('.').Replace('-', '.').Replace('/', '.');
+            var parts = normalized.Split('.', StringSplitOptions.RemoveEmptyEntries);
+
+            return string.Join(".", parts.Select(p =>
+                int.TryParse(p, out var n) ? n.ToString() : p.TrimStart('0')));
+        }
+
+        private void LoadSelectedExcelSheetColumns()
+        {
+            ExcelColumns.Clear();
+            _excelData = new();
+
+            if (string.IsNullOrWhiteSpace(SelectedExcelSheet))
+            {
+                SelectedExcelColumn = null;
+                return;
+            }
+
+            var sheet = _excelWorkbook.FirstOrDefault(s => string.Equals(s.SheetName, SelectedExcelSheet, StringComparison.OrdinalIgnoreCase));
+            if (sheet == null)
+            {
+                SelectedExcelColumn = null;
+                return;
+            }
+
+            _excelData = sheet.Columns;
+            foreach (var kv in _excelData.OrderBy(k => k.Key))
+                ExcelColumns.Add(kv.Value.Header);
+
+            SelectedExcelColumn = ExcelColumns.FirstOrDefault();
         }
 
         private void ToggleExpand(DocumentHeading? parent)
