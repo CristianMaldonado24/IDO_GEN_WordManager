@@ -102,6 +102,3 @@ Queda estrictamente prohibida la distribución, reproducción, sublicencia, vent
 Cualquier uso no autorizado del Software dará lugar a la terminación inmediata de los derechos otorgados en virtud de esta licencia y podrá dar lugar a acciones legales.
 
 El uso de este Software implica la aceptación de estos términos y condiciones.
-
-![.NET](https://img.shields.io/badge/.NET-8.0-purple.svg)
-![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)
