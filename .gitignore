@@ -7,14 +7,16 @@ obj/
 *.suo
 .vs/
 
-# Publish output (mantener carpeta publish en repo)
-publish/*.exe
-publish/*.pdb
-publish/*.rar
+# SDK sentinels
+.dotnet/
 
-# Test/temp files in Resources
+# Archivos de prueba en Resources
 IDO_GEN_WordManager/Resources/*.docx
 IDO_GEN_WordManager/Resources/*.xlsx
+
+# Binarios de publish (solo mantener el .rar para compartir)
+publish/*.exe
+publish/*.pdb
 
 # Logs
 *.log
