@@ -10,7 +10,10 @@ namespace IDO_GEN_WordManager.Models
         private bool _isVisible = true;
         private bool _isExpanded = true;
         private bool _isHiddenByCollapse = false;
+        private bool _isSelected = false;
         private HeadingAction _action = HeadingAction.Hide;
+        private int _actionApplied = 0;
+        public int ActionApplied => _actionApplied;
 
         private string _wordNumber = string.Empty;
         private string _originalWordNumber = string.Empty;
@@ -93,6 +96,8 @@ namespace IDO_GEN_WordManager.Models
                 {
                     IsVisible = true;
                 }
+                _actionApplied++;
+                OnPropertyChanged(nameof(ActionApplied));
             }
         }
 
@@ -110,6 +115,8 @@ namespace IDO_GEN_WordManager.Models
                 {
                     IsVisible = true;
                 }
+                _actionApplied++;
+                OnPropertyChanged(nameof(ActionApplied));
             }
         }
 
@@ -135,8 +142,9 @@ namespace IDO_GEN_WordManager.Models
         public double RowOpacity => !_isVisible && _action == HeadingAction.Delete ? 0.3 : !_isVisible ? 0.5 : 1.0;
         public string TextDecoration => !_isVisible && _action == HeadingAction.Delete ? "Strikethrough" : "None";
 
-        /// <summary>Color de fondo de la fila: amarillo claro si oculto, rojo claro si eliminado, transparente si activo.</summary>
-        public string RowBackground => !_isVisible && _action == HeadingAction.Delete ? "#FFCDD2"
+        /// <summary>Color de fondo de la fila: celeste si seleccionada, amarillo claro si oculto, rojo claro si eliminado, transparente si activo.</summary>
+        public string RowBackground => _isSelected ? "#B3E5FC"
+                                     : !_isVisible && _action == HeadingAction.Delete ? "#FFCDD2"
                                      : !_isVisible && _action == HeadingAction.Hide    ? "#FFF9C4"
                                      : "Transparent";
 
@@ -150,6 +158,12 @@ namespace IDO_GEN_WordManager.Models
         {
             get => _isHiddenByCollapse;
             set { if (_isHiddenByCollapse != value) { _isHiddenByCollapse = value; OnPropertyChanged(); } }
+        }
+
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set { if (_isSelected != value) { _isSelected = value; OnPropertyChanged(); OnPropertyChanged(nameof(RowBackground)); } }
         }
 
         public string ExpandIcon => HasChildren ? (IsExpanded ? "▼" : "▶") : string.Empty;

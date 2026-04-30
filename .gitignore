@@ -1,0 +1,20 @@
+# Build outputs
+bin/
+obj/
+
+# User-specific files
+*.user
+*.suo
+.vs/
+
+# Publish output (mantener carpeta publish en repo)
+publish/*.exe
+publish/*.pdb
+publish/*.rar
+
+# Test/temp files in Resources
+IDO_GEN_WordManager/Resources/*.docx
+IDO_GEN_WordManager/Resources/*.xlsx
+
+# Logs
+*.log

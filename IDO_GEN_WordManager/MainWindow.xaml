@@ -31,12 +31,13 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Width="38" Height="38" Background="#214A82" CornerRadius="8" Margin="0,0,12,0">
-                        <Image Source="Resources/Brand/logo-idom.png"
+                    <Border Width="38" Height="38" Background="White" CornerRadius="8" Margin="0,0,12,0">
+                        <Image Source="/Resources/logo-idom.png"
                                Width="22" Height="22"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"
-                               Stretch="Uniform"/>
+                               Stretch="Uniform"
+                               RenderOptions.BitmapScalingMode="HighQuality"/>
                     </Border>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="IDO GEN — Word Manager"
@@ -46,12 +47,13 @@
                     </StackPanel>
                 </StackPanel>
                 <Image Grid.Column="1"
-                       Source="Resources/Brand/logo-idom.png"
+                       Source="/Resources/logo-idom.png"
                        Height="34"
                        HorizontalAlignment="Right"
                        VerticalAlignment="Center"
                        Stretch="Uniform"
-                       Margin="16,0,0,0"/>
+                       Margin="16,0,0,0"
+                       RenderOptions.BitmapScalingMode="HighQuality"/>
             </Grid>
         </Border>
 
@@ -281,6 +283,7 @@
                 ClipToBounds="True">
             <DataGrid x:Name="HeadingsGrid"
                       ItemsSource="{Binding Headings}"
+                      SelectionMode="Extended"
                       BorderThickness="0">
 
                 <DataGrid.Columns>
@@ -533,17 +536,10 @@
 
                 </DataGrid.Columns>
 
-                <!-- Color de fila: amarillo claro=ocultar, rojo claro=eliminar -->
+                <!-- Color de fila: celeste=seleccionada, amarillo claro=ocultar, rojo claro=eliminar -->
                 <DataGrid.RowStyle>
                     <Style TargetType="DataGridRow">
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsHide}" Value="True">
-                                <Setter Property="Background" Value="#FFF9C4"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding IsDelete}" Value="True">
-                                <Setter Property="Background" Value="#FFCDD2"/>
-                            </DataTrigger>
-                        </Style.Triggers>
+                        <Setter Property="Background" Value="{Binding RowBackground}"/>
                     </Style>
                 </DataGrid.RowStyle>
 

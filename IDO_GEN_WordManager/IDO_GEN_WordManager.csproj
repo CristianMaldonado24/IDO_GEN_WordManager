@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <ApplicationIcon>Resources\pen.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,8 +14,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Resource Include="Resources\Brand\iconico.ico" />
-    <Resource Include="Resources\Brand\logo-idom.png" />
+    <Resource Include="Resources\logo-idom.png" />
+    <Resource Include="Resources\pen.ico" />
   </ItemGroup>
 
 </Project>

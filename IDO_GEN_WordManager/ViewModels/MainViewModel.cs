@@ -498,10 +498,41 @@ namespace IDO_GEN_WordManager.ViewModels
             RefreshCounters();
         }
 
+        public event EventHandler? ClearSelectionRequested;
+
+        private bool _applyingGroupAction = false;
+
         private void Heading_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(DocumentHeading.IsVisible))
                 RefreshCounters();
+
+            if (_applyingGroupAction) return;
+            if (e.PropertyName != nameof(DocumentHeading.ActionApplied)) return;
+
+            var changed = sender as DocumentHeading;
+            if (changed == null || !changed.IsSelected) return;
+
+            var selected = Headings.Where(h => h.IsSelected && h != changed).ToList();
+            if (selected.Count == 0) return;
+
+            _applyingGroupAction = true;
+            try
+            {
+                foreach (var h in selected)
+                {
+                    h.Action     = changed.Action;
+                    h.IsVisible  = changed.IsVisible;
+                    h.IsSelected = false;
+                }
+                changed.IsSelected = false;
+                RefreshCounters();
+                ClearSelectionRequested?.Invoke(this, EventArgs.Empty);
+            }
+            finally
+            {
+                _applyingGroupAction = false;
+            }
         }
 
         private void RefreshCounters()
