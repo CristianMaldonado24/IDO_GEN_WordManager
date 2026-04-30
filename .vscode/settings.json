@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "git config": true,
+        "git reset": true,
+        "git clean": true,
+        "git add": true
+    }
+}
